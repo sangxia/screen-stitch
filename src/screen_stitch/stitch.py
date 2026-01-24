@@ -21,11 +21,18 @@ class StitchParams:
 
 
 def append_strip(strips: list[np.ndarray], roi_bgr: np.ndarray, scroll_px: int) -> None:
-    h = roi_bgr.shape[0]
-    scroll_px = int(max(0, min(h, scroll_px)))
-    if scroll_px <= 0:
-        return
-    strips.append(roi_bgr[h - scroll_px : h, :, :])
+    """Append the newly revealed strip from a scrolling ROI.
+
+    Args:
+        strips: Accumulated list of vertical strips for stitching. Each entry
+            has shape (H, W, 3) with dtype ``uint8``.
+        roi_bgr: Current frame region-of-interest in BGR with shape (H, W, 3)
+            and dtype ``uint8``.
+        scroll_px: The height of the bottom strip in ``roi_bgr`` to be cropped.
+    """
+    assert 0 <= scroll_px < roi_bgr.shape[0]
+    if scroll_px:
+        strips.append(roi_bgr[-scroll_px:, :, :])
 
 
 def determine_scroll_px_by_phase(
@@ -33,6 +40,22 @@ def determine_scroll_px_by_phase(
     cur_gray: np.ndarray,
     params: StitchParams,
 ) -> int | None:
+    """Estimate scroll using phase correlation with overlap verification.
+
+    This first uses phase correlation to estimate vertical translation, then
+    checks horizontal drift, response strength, and overlap similarity via
+    normalized cross-correlation to reject unreliable matches.
+
+    Args:
+        prev_gray: Previous grayscale ROI with shape (H, W) and dtype
+            ``uint8`` (or compatible numeric type).
+        cur_gray: Current grayscale ROI with shape (H, W) and dtype matching
+            ``prev_gray``.
+        params: Stitching parameters controlling thresholds.
+
+    Returns:
+        The estimated vertical scroll in pixels, or ``None`` if invalid.
+    """
     dx, dy, resp = estimate_scroll_phase_corr(prev_gray, cur_gray)
     dy = int(round(-dy))
     if abs(dx) > params.phase_max_dx_allowed_px:
@@ -56,6 +79,18 @@ def determine_scroll_px_by_template(
     cur_gray: np.ndarray,
     params: StitchParams,
 ) -> int | None:
+    """Estimate scroll via template matching when phase correlation fails.
+
+    Args:
+        prev_gray: Previous grayscale ROI with shape (H, W) and dtype
+            ``uint8`` (or compatible numeric type).
+        cur_gray: Current grayscale ROI with shape (H, W) and dtype matching
+            ``prev_gray``.
+        params: Stitching parameters controlling template thresholds.
+
+    Returns:
+        The estimated vertical scroll in pixels, or ``None`` if invalid.
+    """
     result = estimate_scroll_template(
         prev_gray, cur_gray, tmpl_h=int(params.min_scroll_frac * prev_gray.shape[0])
     )
@@ -73,6 +108,18 @@ def determine_scroll_px(
     cur_gray: np.ndarray,
     params: StitchParams,
 ) -> int | None:
+    """Select the best scroll estimate using phase correlation then template matching.
+
+    Args:
+        prev_gray: Previous grayscale ROI with shape (H, W) and dtype
+            ``uint8`` (or compatible numeric type).
+        cur_gray: Current grayscale ROI with shape (H, W) and dtype matching
+            ``prev_gray``.
+        params: Stitching parameters controlling thresholds.
+
+    Returns:
+        The estimated vertical scroll in pixels, or ``None`` if no method passes.
+    """
     scroll_px = determine_scroll_px_by_phase(prev_gray, cur_gray, params)
     if scroll_px is None:
         scroll_px = determine_scroll_px_by_template(prev_gray, cur_gray, params)
@@ -84,6 +131,25 @@ def stitch_video(
     layout: Layout,
     params: StitchParams,
 ) -> np.ndarray:
+    """Stitch a vertically scrolling video into a single tall image.
+
+    This extracts a stable region-of-interest between header and footer, then
+    estimates vertical translation between consecutive frames using phase
+    correlation or template matching. Newly revealed strips are appended and
+    stacked to create the final stitched image.
+
+    Args:
+        video_path: Path to the input video.
+        layout: Detected layout bounds for header/footer.
+        params: Stitching parameters controlling thresholds.
+
+    Returns:
+        The stitched image as a single BGR array with shape (H_total, W, 3) and
+        dtype ``uint8``.
+
+    Raises:
+        RuntimeError: If the video cannot be opened.
+    """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise RuntimeError("Failed to open video")
