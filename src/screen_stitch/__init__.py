@@ -34,6 +34,12 @@ def build_argparser() -> argparse.ArgumentParser:
 
     # Stitching knobs
     ap.add_argument(
+        "--min-scroll-frac",
+        type=float,
+        default=0.3,
+        help="Minimum scroll as a fraction of ROI height.",
+    )
+    ap.add_argument(
         "--phase-max-dx-allowed-px",
         type=int,
         default=4,
@@ -46,22 +52,16 @@ def build_argparser() -> argparse.ArgumentParser:
         help="Min phaseCorrelate response to trust dy.",
     )
     ap.add_argument(
-        "--min-scroll-frac",
+        "--phase-min-overlap-ncc",
         type=float,
-        default=0.3,
-        help="Minimum scroll as a fraction of ROI height.",
+        default=0.65,
+        help="Min NCC for overlap validation.",
     )
     ap.add_argument(
         "--template-min-score",
         type=float,
         default=0.8,
         help="Min template match score to accept fallback.",
-    )
-    ap.add_argument(
-        "--phase-min-overlap-ncc",
-        type=float,
-        default=0.65,
-        help="Min NCC for overlap validation.",
     )
 
     return ap
@@ -96,26 +96,6 @@ def main() -> int:
         ),
     )
     cv2.imwrite(str(args.output), img)
-
-    # layout, stable_frame = auto_detect_layout(args)
-
-    # sp = StitchParams(
-    #     video_file=args.video_file,
-    #     out_png=args.output_png,
-    #     start_frame_idx=layout.start_frame_idx,
-    #     header_y1=layout.header_y1,
-    #     footer_y0=layout.footer_y0,
-    #     min_scroll_px=args.min_scroll_px,
-    #     min_overlap_ncc=args.min_overlap_ncc,
-    #     min_phase_response=args.min_phase_response,
-    #     tmpl_h=args.tmpl_h,
-    #     min_tmpl_score=args.min_tmpl_score,
-    #     max_dx_allowed=args.max_dx_allowed,
-    #     max_dim=args.max_dim,
-    #     verbose=args.verbose,
-    # )
-
-    # stitch_video(sp)
     return 0
 
 
