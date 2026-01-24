@@ -87,6 +87,7 @@ def find_header_stable_start(
     best_start, best_end = find_longest_segment_in_mask(row_mask)
     if best_start is None:
         raise RuntimeError("Header not found")
+    assert best_end is not None  # sanity check
 
     frames = frames[:, best_start : best_end + 1, :]
     diffs = np.mean(np.abs(frames[:-1, :, :] - frames[1:, :, :]), axis=(1, 2))

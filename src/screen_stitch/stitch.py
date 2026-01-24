@@ -17,7 +17,7 @@ class StitchParams:
     phase_min_response: float
     phase_min_overlap_ncc: float
     template_min_score: float
-    min_scroll_frac: int
+    min_scroll_frac: float
 
 
 def append_strip(strips: list[np.ndarray], roi_bgr: np.ndarray, scroll_px: int) -> None:
@@ -185,6 +185,8 @@ def stitch_video(
         used_frames.append(idx)
 
     cap.release()
+    if prev_gray is None:
+        raise RuntimeError("Unable to find any frames, start index likely incorrect.")
 
     # handle last frame
     scroll_px = determine_scroll_px(prev_gray, cur_gray, params)
