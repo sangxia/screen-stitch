@@ -1,3 +1,9 @@
+# vim swap files
+*.sw*
+
+/data
+/out
+
 # Python-generated files
 __pycache__/
 *.py[oc]
