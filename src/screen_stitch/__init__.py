@@ -12,113 +12,56 @@ def build_argparser() -> argparse.ArgumentParser:
     ap.add_argument("video_file", help="Input video file.", type=Path)
     ap.add_argument("output", help="Output image file name.", type=Path)
 
-    # Auto-detection knobs (defaults intended to work broadly)
+    # Auto-detection knobs
     ap.add_argument(
-        "--max-probe-frames",
+        "--header-max-probe-frames",
         type=int,
-        default=600,
+        default=200,
         help="Max frames scanned from start to find stable header start.",
     )
     ap.add_argument(
-        "--top-probe-height",
-        type=int,
-        default=260,
-        help="Top region height used to detect header stabilization.",
-    )
-    ap.add_argument(
-        "--stable-window",
-        type=int,
-        default=15,
-        help="Consecutive frames required under threshold to declare header stable.",
-    )
-    ap.add_argument(
-        "--stable-mad-thresh",
+        "--header-top-probe-height-frac",
         type=float,
-        default=2.5,
-        help="Mean absdiff threshold (0-255) in top probe to consider stable.",
+        default=0.3,
+        help="Top probe height as a fraction of frame height.",
     )
     ap.add_argument(
-        "--sample-stride",
-        type=int,
-        default=5,
-        help="Stride between sampled frames used for header/footer boundary detection.",
-    )
-    ap.add_argument(
-        "--max-samples",
-        type=int,
-        default=60,
-        help="Max sampled frames used for boundary detection after stabilization.",
-    )
-    ap.add_argument(
-        "--header-row-diff-thresh",
+        "--header-mad-limit",
         type=float,
-        default=4.5,
-        help="Row mean absdiff threshold (0-255) to classify header rows as stable.",
-    )
-    ap.add_argument(
-        "--footer-row-diff-thresh",
-        type=float,
-        default=6.0,
-        help="Row mean absdiff threshold (0-255) to classify footer rows as stable.",
-    )
-    ap.add_argument(
-        "--min-footer-height",
-        type=int,
-        default=50,
-        help="Minimum footer height (px) to accept a detected bottom stable band.",
-    )
-    ap.add_argument(
-        "--boundary-smooth-k",
-        type=int,
-        default=9,
-        help="Smoothing window (rows) for boundary detection signals.",
-    )
-    ap.add_argument(
-        "--detect-max-dim",
-        type=int,
-        default=900,
-        help="Downscale max dimension for detection computations.",
+        default=5.0,
+        help="Mean absdiff threshold (0-255) for header stabilization.",
     )
 
     # Stitching knobs
     ap.add_argument(
-        "--min-scroll-px", type=int, default=3, help="Minimum scroll to append (px)."
-    )
-    ap.add_argument(
-        "--min-overlap-ncc",
-        type=float,
-        default=0.65,
-        help="Min NCC for overlap validation.",
-    )
-    ap.add_argument(
-        "--min-phase-response",
-        type=float,
-        default=0.10,
-        help="Min phaseCorrelate response to trust dy.",
-    )
-    ap.add_argument(
-        "--tmpl-h",
+        "--phase-max-dx-allowed-px",
         type=int,
-        default=200,
-        help="Template height (px) for fallback template matching.",
-    )
-    ap.add_argument(
-        "--min-tmpl-score",
-        type=float,
-        default=0.80,
-        help="Min template match score to accept fallback.",
-    )
-    ap.add_argument(
-        "--max-dx-allowed",
-        type=float,
-        default=4.0,
+        default=4,
         help="Reject if |dx| exceeds this (px).",
     )
     ap.add_argument(
-        "--max-dim",
-        type=int,
-        default=900,
-        help="Downscale max dimension for stitching computations.",
+        "--phase-min-response",
+        type=float,
+        default=0.1,
+        help="Min phaseCorrelate response to trust dy.",
+    )
+    ap.add_argument(
+        "--min-scroll-frac",
+        type=float,
+        default=0.3,
+        help="Minimum scroll as a fraction of ROI height.",
+    )
+    ap.add_argument(
+        "--template-min-score",
+        type=float,
+        default=0.8,
+        help="Min template match score to accept fallback.",
+    )
+    ap.add_argument(
+        "--phase-min-overlap-ncc",
+        type=float,
+        default=0.65,
+        help="Min NCC for overlap validation.",
     )
 
     return ap
@@ -130,8 +73,9 @@ def main() -> int:
 
     layout = auto_detect_layout(
         args.video_file,
-        header_max_probe_frames=200,
-        header_top_probe_height_frac=0.3,
+        header_max_probe_frames=args.header_max_probe_frames,
+        header_top_probe_height_frac=args.header_top_probe_height_frac,
+        header_mad_limit=args.header_mad_limit,
     )
     print(
         (
@@ -144,11 +88,11 @@ def main() -> int:
         args.video_file,
         layout,
         StitchParams(
-            phase_max_dx_allowed_px=4,
-            phase_min_response=0.1,
-            min_scroll_frac=0.3,
-            template_min_score=0.8,
-            phase_min_overlap_ncc=0.65,
+            phase_max_dx_allowed_px=args.phase_max_dx_allowed_px,
+            phase_min_response=args.phase_min_response,
+            min_scroll_frac=args.min_scroll_frac,
+            template_min_score=args.template_min_score,
+            phase_min_overlap_ncc=args.phase_min_overlap_ncc,
         ),
     )
     cv2.imwrite(str(args.output), img)
