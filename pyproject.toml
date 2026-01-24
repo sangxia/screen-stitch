@@ -7,7 +7,9 @@ authors = [
     { name = "Sangxia Huang", email = "huang.sangxia@gmail.com" }
 ]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "pre-commit>=4.5.1",
+]
 
 [project.scripts]
 screen-stitch = "screen_stitch:main"
