@@ -28,13 +28,11 @@ def append_strip(strips: list[np.ndarray], roi_bgr: np.ndarray, scroll_px: int) 
             has shape (H, W, 3) with dtype ``uint8``.
         roi_bgr: Current frame region-of-interest in BGR with shape (H, W, 3)
             and dtype ``uint8``.
-        scroll_px: Estimated vertical scroll in pixels.
+        scroll_px: The height of the bottom strip in ``roi_bgr`` to be cropped.
     """
-    h = roi_bgr.shape[0]
-    scroll_px = int(max(0, min(h, scroll_px)))
-    if scroll_px <= 0:
-        return
-    strips.append(roi_bgr[h - scroll_px : h, :, :])
+    assert 0 <= scroll_px < roi_bgr.shape[0]
+    if scroll_px:
+        strips.append(roi_bgr[-scroll_px:, :, :])
 
 
 def determine_scroll_px_by_phase(

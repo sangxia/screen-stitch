@@ -105,9 +105,15 @@ def detect_header_footer_bounds(
 ) -> int:
     """Detect the first row of the stable footer region below the header.
 
-    This computes per-pixel standard deviation across frames starting at
-    ``start_idx`` and identifies rows with low temporal variance (stable footer
-    content). It returns the top row index of the longest stable footer segment.
+    The footer region is expected to have UI elements floating above content
+    scrolling pass. Due to the UI elements, it is expected to have local regions
+    that are stable across frames. Footer is located by detecting these regions.
+    Only regions below the header region are considered.
+
+    The detection is done by computing per-pixel standard deviation across frames
+    starting at ``start_idx`` and identifies rows with notable areas of low
+    temporal variance (stable footer content). It returns the top row index of
+    the longest stable footer segment.
 
     Args:
         video_path: Path to the input video.
