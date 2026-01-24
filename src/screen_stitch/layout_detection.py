@@ -14,6 +14,16 @@ class Layout:
 
 
 def find_longest_segment_in_mask(mask: np.ndarray) -> tuple[int | None, int | None]:
+    """Find the longest contiguous True segment in a 1D boolean mask.
+
+    Args:
+        mask: Boolean mask of shape (N,) and dtype ``bool`` indicating the rows
+            that satisfy a stability criterion.
+
+    Returns:
+        A tuple of (start_index, end_index) for the longest True segment, or
+        (None, None) if no True region exists.
+    """
     diff_idx = np.where(mask[:-1] != mask[1:])[0] + 1
     best_start, best_end = None, None
     for seg_idx in np.split(np.arange(mask.shape[0]), diff_idx):
@@ -30,10 +40,25 @@ def find_header_stable_start(
     top_probe_height_frac: float,
     mad_limit: float,
 ) -> tuple[int, int, int]:
-    """
+    """Detect a stable header region based on temporal intensity variation.
+
+    The method measures per-row mean absolute differences across frames in the
+    top portion of the video to identify rows that remain visually stable
+    (consistent UI chrome). It then finds the longest stable band and returns
+    the earliest frame index where the header becomes steady.
+
+    Args:
+        video_path: Path to the input video.
+        max_probe_frames: Maximum number of frames to analyze.
+        top_probe_height_frac: Fraction of the image height to probe from the top.
+        mad_limit: Mean absolute difference threshold for stability.
+
     Returns:
-        the first frame to cut the video from, the row start and row end (inclusive)
-        of the header area
+        A tuple of (start_frame_idx, header_row_start, header_row_end), where
+        ``header_row_start`` and ``header_row_end`` are inclusive.
+
+    Raises:
+        RuntimeError: If no frames are available or a header cannot be found.
     """
     cap = cv2.VideoCapture(str(video_path))
     ok, frame0 = cap.read()
@@ -78,7 +103,23 @@ def detect_header_footer_bounds(
     start_idx: int,
     header_end_row: int,
 ) -> int:
-    """ """
+    """Detect the first row of the stable footer region below the header.
+
+    This computes per-pixel standard deviation across frames starting at
+    ``start_idx`` and identifies rows with low temporal variance (stable footer
+    content). It returns the top row index of the longest stable footer segment.
+
+    Args:
+        video_path: Path to the input video.
+        start_idx: Frame index at which to begin analysis.
+        header_end_row: Inclusive end row of the header region.
+
+    Returns:
+        The row index of the footer start in full-frame coordinates.
+
+    Raises:
+        RuntimeError: If a footer segment cannot be found.
+    """
     cap = cv2.VideoCapture(str(video_path))
     ok, frame = cap.read()
     if not ok or frame is None:
@@ -110,6 +151,22 @@ def auto_detect_layout(
     header_top_probe_height_frac: float,
     header_mad_limit: float = 5,
 ) -> Layout:
+    """Automatically detect header/footer bounds and build a Layout object.
+
+    Args:
+        video_path: Path to the input video.
+        header_max_probe_frames: Maximum number of frames to probe for header.
+        header_top_probe_height_frac: Fraction of the height used for header probing.
+        header_mad_limit: Mean absolute difference threshold for stability.
+
+    Returns:
+        A populated ``Layout`` with header/footer bounds and extracted header
+        frame. ``Layout.header_frame`` has shape (H_header, W, 3) and dtype
+        ``uint8``.
+
+    Raises:
+        RuntimeError: If the video cannot be read to extract header content.
+    """
     start_idx, header_row_start, header_row_end = find_header_stable_start(
         video_path,
         max_probe_frames=header_max_probe_frames,
