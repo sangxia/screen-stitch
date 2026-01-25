@@ -20,7 +20,12 @@ class StitchParams:
     min_scroll_frac: float
 
 
-def append_strip(strips: list[np.ndarray], roi_bgr: np.ndarray, scroll_px: int) -> None:
+def append_strip(
+    strips: list[np.ndarray],
+    roi_bgr: np.ndarray,
+    scroll_px: int,
+    idx: int | None = None,
+) -> None:
     """Append the newly revealed strip from a scrolling ROI.
 
     Args:
@@ -32,7 +37,13 @@ def append_strip(strips: list[np.ndarray], roi_bgr: np.ndarray, scroll_px: int) 
     """
     assert 0 <= scroll_px < roi_bgr.shape[0]
     if scroll_px:
-        strips.append(roi_bgr[-scroll_px:, :, :])
+        img = roi_bgr[-scroll_px:, :, :].copy()
+        # # NOTE uncomment to add ID for debugging
+        # if idx is not None:
+        #     img = cv2.putText(
+        #         img, str(idx), (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 255), 1
+        #     )
+        strips.append(img)
 
 
 def determine_scroll_px_by_phase(
@@ -180,7 +191,7 @@ def stitch_video(
         if scroll_px is None or scroll_px < min_scroll_px:
             continue
 
-        append_strip(strips, cur_roi, scroll_px)
+        append_strip(strips, cur_roi, scroll_px, idx=idx)
         prev_gray = cur_gray
         used_frames.append(idx)
 
