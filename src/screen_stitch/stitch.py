@@ -171,6 +171,10 @@ def stitch_video(
     strips = []
     prev_gray = None
     used_frames = []
+    carousel_row_incl = layout.carousel_row_incl
+    carousel_frame_indices = layout.carousel_frame_indices or []
+    carousel_end_idx = layout.carousel_end_frame_idx
+    carousel_pos = 0
     while True:
         ok, frame = cap.read()
         if not ok or frame is None:
@@ -178,8 +182,28 @@ def stitch_video(
         idx += 1
         if idx < layout.start_frame_idx:
             continue
+        if (
+            carousel_end_idx is not None
+            and carousel_row_incl is not None
+            and idx < carousel_end_idx
+        ):
+            if (
+                carousel_pos < len(carousel_frame_indices)
+                and idx == carousel_frame_indices[carousel_pos]
+            ):
+                carousel_start, carousel_end = carousel_row_incl
+                strips.append(frame[carousel_start : carousel_end + 1, :, :])
+                used_frames.append(idx)
+                carousel_pos += 1
+            continue
+        if carousel_end_idx is not None and prev_gray is None:
+            cur_roi = frame[roi_start:roi_end, :, :]
+            prev_gray = to_gray(cur_roi)
+            cur_gray = prev_gray
+            used_frames.append(idx)
+            continue
 
-        if len(strips) == 0:
+        if len(strips) == 0 and prev_gray is None:
             strips.append(frame[roi_start:roi_end, :, :])
             used_frames.append(idx)
             prev_gray = to_gray(strips[-1])
