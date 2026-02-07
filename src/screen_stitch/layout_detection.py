@@ -113,6 +113,7 @@ def detect_header_footer_bounds(
     video_path: Path,
     start_idx: int,
     header_end_row: int,
+    footer_row_std_thresh: float,
 ) -> int:
     """Detect the first row of the stable footer region below the header.
 
@@ -130,6 +131,9 @@ def detect_header_footer_bounds(
         video_path: Path to the input video.
         start_idx: Frame index at which to begin analysis.
         header_end_row: Inclusive end row of the header region.
+        footer_row_std_thresh: threshold of standard deviation below which to
+            be considered static. Use lower value (e.g. 5) for non-transparent
+            elements, higher value (e.g. 40) for half transparent ones.
 
     Returns:
         The row index of the footer start in full-frame coordinates.
@@ -155,7 +159,7 @@ def detect_header_footer_bounds(
         frames.append(to_gray(frame[header_end_row + 1 :, :]))
     frames = np.asarray(frames)
     std = np.std(frames, axis=0)
-    row_mask = np.mean(std < 40, axis=1) > 0.1
+    row_mask = np.mean(std < footer_row_std_thresh, axis=1) > 0.1
     footer_start, _ = find_longest_segment_in_mask(row_mask)
     if footer_start is None:
         raise RuntimeError("Footer not found")
@@ -207,15 +211,12 @@ def detect_carousel_segment(
             return None, None, []
         idx += 1
 
-    candidate_range = [last_header_row + 1, frame.shape[0]]
-    min_non_carousel_height = (
-        candidate_range[1] - candidate_range[0]
-    ) * min_non_carousel_frac
-    max_non_carousel_height = (candidate_range[1] - candidate_range[0]) * (
-        1 - min_carousel_frac
-    )
+    tot_height = frame.shape[0]
+    candidate_range = last_header_row + 1  # from candidate_range to the bottom
+    min_non_carousel_height = (tot_height - candidate_range) * min_non_carousel_frac
+    max_non_carousel_height = (tot_height - candidate_range) * (1 - min_carousel_frac)
     last_frame = frame[last_header_row + 1 :, :, :].astype(float)
-    while candidate_range[0] < candidate_range[1]:
+    while candidate_range < tot_height:
         ok, frame = cap.read()
         if not ok or frame is None:
             cap.release()
@@ -223,22 +224,21 @@ def detect_carousel_segment(
         idx += 1
         frame = frame[last_header_row + 1 :, :, :].astype(float)
         diff = np.mean(np.abs(last_frame - frame), axis=(1, 2))
-        tmp_start, tmp_end = find_longest_segment_in_mask(diff < 2)  # TODO parametrize
-        if tmp_start is None:
-            break
-        new_range = [
-            max(tmp_start + last_header_row, candidate_range[0]),
-            min(tmp_end + last_header_row, candidate_range[1]),
-        ]
-        if new_range[1] - new_range[0] < min_non_carousel_height:
+        mask = diff < 2
+        row_idx = np.where(~mask)[0]
+        if row_idx.shape[0] == 0:
+            continue
+        row_idx = row_idx.max()
+        new_range = max(row_idx + last_header_row + 1, candidate_range)
+        if tot_height - new_range < min_non_carousel_height:
             break
         candidate_range = new_range
         last_frame = frame
     cap.release()
-    if candidate_range[1] - candidate_range[0] > max_non_carousel_height:
+    if tot_height - candidate_range > max_non_carousel_height:
         # many pixels changed very early, indicating that there is no carousel section
         return None, None, []
-    carousel_last_row = candidate_range[0]
+    carousel_last_row = candidate_range
     carousel_end_frame_idx = idx - 1
     indices = []
     last_frame = None
@@ -272,6 +272,7 @@ def auto_detect_layout(
     carousel_upper_spike_thresh: float = 12.0,
     carousel_lower_scroll_thresh: float = 6.0,
     carousel_scroll_consecutive: int = 3,
+    footer_row_std_thresh: float = 40,
 ) -> Layout:
     """Automatically detect header/footer bounds and build a Layout object.
 
@@ -310,6 +311,7 @@ def auto_detect_layout(
         if carousel_end_frame_idx is None
         else carousel_end_frame_idx,
         header_end_row=header_row_end,
+        footer_row_std_thresh=footer_row_std_thresh,
     )
     cap = cv2.VideoCapture(str(video_path))
     ok, frame = cap.read()
