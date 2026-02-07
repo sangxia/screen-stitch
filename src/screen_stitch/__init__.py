@@ -41,6 +41,21 @@ def build_argparser() -> argparse.ArgumentParser:
             "e.g. 5 for non-transparent element."
         ),
     )
+    ap.add_argument(
+        "--carousel-min-carousel-frac",
+        type=float,
+        default=0.2,
+        help="Minimum fraction of the content height that must be carousel when present.",
+    )
+    ap.add_argument(
+        "--carousel-min-non-carousel-frac",
+        type=float,
+        default=0.2,
+        help=(
+            "Minimum fraction of the content height that must be non-carousel"
+            " to consider the sequence valid."
+        ),
+    )
 
     # Stitching knobs
     ap.add_argument(
@@ -87,6 +102,8 @@ def main() -> int:
         header_top_probe_height_frac=args.header_top_probe_height_frac,
         header_mad_limit=args.header_mad_limit,
         footer_row_std_thresh=args.footer_row_std_thresh,
+        carousel_min_carousel_frac=args.carousel_min_carousel_frac,
+        carousel_min_non_carousel_frac=args.carousel_min_non_carousel_frac,
     )
     print(
         (

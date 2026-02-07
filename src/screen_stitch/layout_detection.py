@@ -184,13 +184,11 @@ def detect_carousel_segment(
     Args:
         video_path: Path to the input video.
         start_idx: Frame index to begin probing.
-        header_row_incl: Inclusive header row bounds.
-        footer_row: Row index where the footer starts.
-        max_probe_frames: Maximum number of frames to analyze.
-        upper_frac: Fraction of the content height used as the upper band.
-        upper_spike_thresh: Minimum spike magnitude in the upper band.
-        lower_scroll_thresh: Threshold for sustained lower-band variance.
-        scroll_consecutive: Frames of sustained lower activity to flag scroll start.
+        last_header_row: Inclusive end row of the header band.
+        min_carousel_frac: Minimum fraction of the content height that must be
+            carousel when present.
+        min_non_carousel_frac: Minimum fraction of the content height that must
+            be non-carousel to consider the sequence valid.
 
     Returns:
         A tuple of (carousel_row_incl, carousel_end_frame_idx, carousel_frames).
@@ -272,6 +270,8 @@ def auto_detect_layout(
     carousel_upper_spike_thresh: float = 12.0,
     carousel_lower_scroll_thresh: float = 6.0,
     carousel_scroll_consecutive: int = 3,
+    carousel_min_carousel_frac: float = 0.2,
+    carousel_min_non_carousel_frac: float = 0.2,
     footer_row_std_thresh: float = 40,
 ) -> Layout:
     """Automatically detect header/footer bounds and build a Layout object.
@@ -281,6 +281,10 @@ def auto_detect_layout(
         header_max_probe_frames: Maximum number of frames to probe for header.
         header_top_probe_height_frac: Fraction of the height used for header probing.
         header_mad_limit: Mean absolute difference threshold for stability.
+        carousel_min_carousel_frac: Minimum fraction of the content height that
+            must be carousel when present.
+        carousel_min_non_carousel_frac: Minimum fraction of the content height
+            that must be non-carousel to consider the sequence valid.
 
     Returns:
         A populated ``Layout`` with header/footer bounds and extracted header
@@ -301,8 +305,8 @@ def auto_detect_layout(
             video_path,
             start_idx=start_idx,
             last_header_row=header_row_end,
-            min_carousel_frac=0.2,  # TODO
-            min_non_carousel_frac=0.2,  # TODO
+            min_carousel_frac=carousel_min_carousel_frac,
+            min_non_carousel_frac=carousel_min_non_carousel_frac,
         )
     )
     footer_row = detect_header_footer_bounds(
