@@ -265,11 +265,6 @@ def auto_detect_layout(
     header_max_probe_frames: int,
     header_top_probe_height_frac: float,
     header_mad_limit: float = 5,
-    carousel_max_probe_frames: int = 80,
-    carousel_upper_frac: float = 0.5,
-    carousel_upper_spike_thresh: float = 12.0,
-    carousel_lower_scroll_thresh: float = 6.0,
-    carousel_scroll_consecutive: int = 3,
     carousel_min_carousel_frac: float = 0.2,
     carousel_min_non_carousel_frac: float = 0.2,
     footer_row_std_thresh: float = 40,
@@ -285,6 +280,9 @@ def auto_detect_layout(
             must be carousel when present.
         carousel_min_non_carousel_frac: Minimum fraction of the content height
             that must be non-carousel to consider the sequence valid.
+        footer_row_std_thresh: threshold of standard deviation below which to
+            be considered static. Use lower value (e.g. 5) for non-transparent
+            elements, higher value (e.g. 40) for half transparent ones.
 
     Returns:
         A populated ``Layout`` with header/footer bounds and extracted header
