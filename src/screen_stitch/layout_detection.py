@@ -11,9 +11,16 @@ class Layout:
     header_row_incl: tuple[int, int]
     footer_row: int
     header_frame: np.ndarray
-    carousel_row_incl: tuple[int, int] | None = None
-    carousel_end_frame_idx: int | None = None
-    carousel_frame_indices: list[int] | None = None
+    carousel_last_row: int | None
+    carousel_end_frame_idx: int | None
+    carousel_frame_indices: list[int]
+
+    def __post_init__(self):
+        assert (self.carousel_last_row is None) == (self.carousel_end_frame_idx is None)
+        if self.carousel_last_row is None:
+            assert len(self.carousel_frame_indices) == 0
+        else:
+            assert len(self.carousel_frame_indices)
 
 
 def find_longest_segment_in_mask(mask: np.ndarray) -> tuple[int | None, int | None]:
@@ -152,19 +159,17 @@ def detect_header_footer_bounds(
     footer_start, _ = find_longest_segment_in_mask(row_mask)
     if footer_start is None:
         raise RuntimeError("Footer not found")
+    if footer_start < 10:  # TODO special case, for low texture video
+        footer_start = frames.shape[1]
     return footer_start + header_end_row
 
 
 def detect_carousel_segment(
     video_path: Path,
     start_idx: int,
-    header_row_incl: tuple[int, int],
-    footer_row: int,
-    max_probe_frames: int = 80,
-    upper_frac: float = 0.5,
-    upper_spike_thresh: float = 12.0,
-    lower_scroll_thresh: float = 6.0,
-    scroll_consecutive: int = 3,
+    last_header_row: int,
+    min_carousel_frac: float,
+    min_non_carousel_frac: float,
 ) -> tuple[tuple[int, int] | None, int | None, list[int]]:
     """Detect a carousel band and its frames before scrolling begins.
 
@@ -202,92 +207,59 @@ def detect_carousel_segment(
             return None, None, []
         idx += 1
 
-    content_start = header_row_incl[1] + 1
-    content_end = footer_row
-    if content_end <= content_start:
-        cap.release()
-        return None, None, []
-    content_h = content_end - content_start
-    upper_h = max(1, int(content_h * upper_frac))
-    upper_slice = slice(0, upper_h)
-    lower_slice = slice(upper_h, content_h)
-
-    frames: list[np.ndarray] = []
-    frame_indices: list[int] = []
-    lower_activity: list[float] = []
-
-    prev_gray = to_gray(frame).astype(np.int16)
-    for _ in range(max_probe_frames):
+    candidate_range = [last_header_row + 1, frame.shape[0]]
+    min_non_carousel_height = (
+        candidate_range[1] - candidate_range[0]
+    ) * min_non_carousel_frac
+    max_non_carousel_height = (candidate_range[1] - candidate_range[0]) * (
+        1 - min_carousel_frac
+    )
+    last_frame = frame[last_header_row + 1 :, :, :].astype(float)
+    while candidate_range[0] < candidate_range[1]:
         ok, frame = cap.read()
         if not ok or frame is None:
+            cap.release()
             break
         idx += 1
-        cur_gray = to_gray(frame).astype(np.int16)
-        diff = np.abs(cur_gray - prev_gray)
-        mean_diff = float(np.mean(diff))
-        if mean_diff < 1.0:
-            prev_gray = cur_gray
-            continue
-        frames.append(cur_gray)
-        frame_indices.append(idx)
-        row_diff = np.mean(diff[content_start:content_end, :], axis=1)
-        lower_activity.append(float(np.mean(row_diff[lower_slice])))
-        prev_gray = cur_gray
-    cap.release()
-
-    if len(frames) < 2:
-        return None, None, []
-
-    stack = np.stack(frames, axis=0)[:, content_start:content_end, :]
-    std = np.std(stack, axis=0)
-    row_std = np.mean(std, axis=1)
-    stable_mask = row_std < lower_scroll_thresh
-    stable_start, stable_end = find_longest_segment_in_mask(stable_mask)
-    if stable_start is None or stable_end is None:
-        return None, None, []
-
-    scroll_start_idx = None
-    for i in range(0, len(lower_activity) - scroll_consecutive + 1):
-        window = lower_activity[i : i + scroll_consecutive]
-        if np.all(np.asarray(window) >= lower_scroll_thresh):
-            scroll_start_idx = frame_indices[i]
+        frame = frame[last_header_row + 1 :, :, :].astype(float)
+        diff = np.mean(np.abs(last_frame - frame), axis=(1, 2))
+        tmp_start, tmp_end = find_longest_segment_in_mask(diff < 2)  # TODO parametrize
+        if tmp_start is None:
             break
-
-    if scroll_start_idx is not None:
-        cut_idx = frame_indices.index(scroll_start_idx)
-        frames = frames[:cut_idx]
-        frame_indices = frame_indices[:cut_idx]
-        stack = stack[:cut_idx, :, :]
-        row_std = np.mean(np.std(stack, axis=0), axis=1)
-    if not frames:
+        new_range = [
+            max(tmp_start + last_header_row, candidate_range[0]),
+            min(tmp_end + last_header_row, candidate_range[1]),
+        ]
+        if new_range[1] - new_range[0] < min_non_carousel_height:
+            break
+        candidate_range = new_range
+        last_frame = frame
+    cap.release()
+    if candidate_range[1] - candidate_range[0] > max_non_carousel_height:
+        # many pixels changed very early, indicating that there is no carousel section
         return None, None, []
-
-    upper_row_std = row_std[upper_slice]
-    row_threshold = max(float(np.percentile(upper_row_std, 75)), upper_spike_thresh)
-    row_mask = upper_row_std >= row_threshold
-    band_start, band_end = find_longest_segment_in_mask(row_mask)
-    if band_start is None or band_end is None:
-        return None, None, []
-    carousel_row_incl = (content_start + band_start, content_start + band_end)
-
-    carousel_frames: list[int] = []
-    carousel_frames.append(frame_indices[0])
-    for i in range(1, len(frames)):
-        cur = frames[i]
-        prev = frames[i - 1]
-        band_diff = np.mean(
-            np.abs(cur - prev)[carousel_row_incl[0] : carousel_row_incl[1] + 1, :]
-        )
-        if band_diff >= upper_spike_thresh:
-            carousel_frames.append(frame_indices[i])
-    carousel_frames = sorted(set(carousel_frames))
-    if not carousel_frames:
-        return None, None, []
-
-    carousel_end_idx = (
-        scroll_start_idx if scroll_start_idx is not None else frame_indices[-1]
-    )
-    return carousel_row_incl, carousel_end_idx, carousel_frames
+    carousel_last_row = candidate_range[0]
+    carousel_end_frame_idx = idx - 1
+    indices = []
+    last_frame = None
+    cap = cv2.VideoCapture(str(video_path))
+    idx = -1
+    while True:
+        ok, frame = cap.read()
+        idx += 1
+        if idx < start_idx:
+            continue
+        if idx >= carousel_end_frame_idx:
+            break
+        frame = frame[last_header_row + 1 : carousel_last_row + 1, :, :]
+        if (
+            last_frame is None
+            or np.max(np.abs(frame.astype(float) - last_frame.astype(float))) > 30
+        ):
+            indices.append(idx)
+            last_frame = frame
+    cap.release()
+    return carousel_last_row, carousel_end_frame_idx, indices
 
 
 def auto_detect_layout(
@@ -323,23 +295,21 @@ def auto_detect_layout(
         top_probe_height_frac=header_top_probe_height_frac,
         mad_limit=header_mad_limit,
     )
-    footer_row = detect_header_footer_bounds(
-        video_path,
-        start_idx=start_idx,
-        header_end_row=header_row_end,
-    )
-    carousel_row_incl, carousel_end_frame_idx, carousel_frame_indices = (
+    carousel_last_row, carousel_end_frame_idx, carousel_frame_indices = (
         detect_carousel_segment(
             video_path,
             start_idx=start_idx,
-            header_row_incl=(header_row_start, header_row_end),
-            footer_row=footer_row,
-            max_probe_frames=carousel_max_probe_frames,
-            upper_frac=carousel_upper_frac,
-            upper_spike_thresh=carousel_upper_spike_thresh,
-            lower_scroll_thresh=carousel_lower_scroll_thresh,
-            scroll_consecutive=carousel_scroll_consecutive,
+            last_header_row=header_row_end,
+            min_carousel_frac=0.2,  # TODO
+            min_non_carousel_frac=0.2,  # TODO
         )
+    )
+    footer_row = detect_header_footer_bounds(
+        video_path,
+        start_idx=start_idx
+        if carousel_end_frame_idx is None
+        else carousel_end_frame_idx,
+        header_end_row=header_row_end,
     )
     cap = cv2.VideoCapture(str(video_path))
     ok, frame = cap.read()
@@ -356,7 +326,7 @@ def auto_detect_layout(
         header_row_incl=(header_row_start, header_row_end),
         footer_row=footer_row,
         header_frame=frame[header_row_start : header_row_end + 1, :, :],
-        carousel_row_incl=carousel_row_incl,
+        carousel_last_row=carousel_last_row,
         carousel_end_frame_idx=carousel_end_frame_idx,
         carousel_frame_indices=carousel_frame_indices,
     )

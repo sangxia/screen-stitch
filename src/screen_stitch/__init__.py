@@ -81,6 +81,7 @@ def main() -> int:
         (
             f"Found start frame {layout.start_frame_idx}, "
             f"header row range {layout.header_row_incl}, "
+            f"carousel row {layout.carousel_last_row}, "
             f"footer row {layout.footer_row}"
         )
     )
