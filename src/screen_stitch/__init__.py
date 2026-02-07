@@ -31,6 +31,31 @@ def build_argparser() -> argparse.ArgumentParser:
         default=5.0,
         help="Mean absdiff threshold (0-255) for header stabilization.",
     )
+    ap.add_argument(
+        "--footer-row-std-thresh",
+        type=float,
+        default=40,
+        help=(
+            "Threshold of pixel standard deviation below which to count as"
+            "static UI element. Default 40 for semi-transparent element. Use lower "
+            "e.g. 5 for non-transparent element."
+        ),
+    )
+    ap.add_argument(
+        "--carousel-min-carousel-frac",
+        type=float,
+        default=0.2,
+        help="Minimum fraction of the content height that must be carousel when present.",
+    )
+    ap.add_argument(
+        "--carousel-min-non-carousel-frac",
+        type=float,
+        default=0.2,
+        help=(
+            "Minimum fraction of the content height that must be non-carousel"
+            " to consider the sequence valid."
+        ),
+    )
 
     # Stitching knobs
     ap.add_argument(
@@ -76,11 +101,15 @@ def main() -> int:
         header_max_probe_frames=args.header_max_probe_frames,
         header_top_probe_height_frac=args.header_top_probe_height_frac,
         header_mad_limit=args.header_mad_limit,
+        footer_row_std_thresh=args.footer_row_std_thresh,
+        carousel_min_carousel_frac=args.carousel_min_carousel_frac,
+        carousel_min_non_carousel_frac=args.carousel_min_non_carousel_frac,
     )
     print(
         (
             f"Found start frame {layout.start_frame_idx}, "
             f"header row range {layout.header_row_incl}, "
+            f"carousel row {layout.carousel_last_row}, "
             f"footer row {layout.footer_row}"
         )
     )
