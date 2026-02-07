@@ -170,6 +170,7 @@ def stitch_video(
     roi_start, roi_end = layout.header_row_incl[1] + 1, layout.footer_row
     min_scroll_px = int((roi_end - roi_start) * params.min_scroll_frac)
     strips = []
+    cur_gray = None
     prev_gray = None
     used_frames = []
     carousel_row_end = layout.carousel_last_row
@@ -189,7 +190,8 @@ def stitch_video(
                 used_frames.append(idx)
             elif idx == carousel_end_idx:
                 # Transition frame: add the non-carousel remainder and seed scrolling state.
-                strips.append(frame[carousel_row_end + 1 : roi_end, :, :])
+                if carousel_row_end + 1 < roi_end:
+                    strips.append(frame[carousel_row_end + 1 : roi_end, :, :])
                 prev_gray = to_gray(frame[roi_start:roi_end, :, :])
                 used_frames.append(idx)
             continue
@@ -217,11 +219,12 @@ def stitch_video(
         raise RuntimeError("Unable to find any frames, start index likely incorrect.")
 
     # handle last frame
-    scroll_px = determine_scroll_px(prev_gray, cur_gray, params)
-    if scroll_px is not None:
-        # NOTE optionally to use 0.5x phase response limit and 0.85x ncc to be more lenient
-        append_strip(strips, cur_roi, scroll_px)
-        used_frames.append(idx)
+    if cur_gray is not None:
+        scroll_px = determine_scroll_px(prev_gray, cur_gray, params)
+        if scroll_px is not None:
+            # NOTE optionally to use 0.5x phase response limit and 0.85x ncc to be more lenient
+            append_strip(strips, cur_roi, scroll_px)
+            used_frames.append(idx)
 
     strips = [layout.header_frame] + strips
     ret = np.vstack(strips)
